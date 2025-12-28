@@ -1,0 +1,113 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      plugin:
+        description: 'Plugin directory name'
+        required: true
+        type: choice
+        options:
+          - meta-pixel-by-tiny-magicwp-pl
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set plugin directory
+        id: plugin
+        run: |
+          echo "directory=${{ github.event.inputs.plugin }}" >> $GITHUB_OUTPUT
+      
+      - name: Extract version from PHP file
+        id: php_version
+        run: |
+          PLUGIN_DIR="${{ steps.plugin.outputs.directory }}"
+          PHP_FILE="$PLUGIN_DIR/$PLUGIN_DIR.php"
+          if [ ! -f "$PHP_FILE" ]; then
+            echo "❌ Main PHP file not found: $PHP_FILE"
+            exit 1
+          fi
+          VERSION=$(grep -oP 'Version:\s+\K[0-9]+\.[0-9]+\.[0-9]+' "$PHP_FILE" | head -1)
+          if [ -z "$VERSION" ]; then
+            echo "❌ Version not found in $PHP_FILE"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Found version: $VERSION"
+      
+      - name: Extract version from README.txt
+        id: readme_version
+        run: |
+          PLUGIN_DIR="${{ steps.plugin.outputs.directory }}"
+          README_FILE="$PLUGIN_DIR/README.txt"
+          if [ ! -f "$README_FILE" ]; then
+            echo "⚠️ README.txt not found, skipping version check"
+            echo "version=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          VERSION=$(grep -oP 'Stable tag:\s+\K[0-9]+\.[0-9]+\.[0-9]+' "$README_FILE" | head -1)
+          if [ -z "$VERSION" ]; then
+            echo "⚠️ Stable tag not found in README.txt"
+            echo "version=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Found version in README.txt: $VERSION"
+      
+      - name: Verify versions match
+        run: |
+          PHP_VERSION="${{ steps.php_version.outputs.version }}"
+          README_VERSION="${{ steps.readme_version.outputs.version }}"
+          
+          if [ -z "$PHP_VERSION" ]; then
+            echo "❌ Could not extract version from PHP file"
+            exit 1
+          fi
+          
+          if [ -n "$README_VERSION" ] && [ "$PHP_VERSION" != "$README_VERSION" ]; then
+            echo "❌ Version mismatch!"
+            echo "PHP file version: $PHP_VERSION"
+            echo "README.txt version: $README_VERSION"
+            exit 1
+          fi
+          
+          echo "✅ All versions match: $PHP_VERSION"
+      
+      - name: Get plugin name
+        id: plugin_name
+        run: |
+          PLUGIN_DIR="${{ steps.plugin.outputs.directory }}"
+          PHP_FILE="$PLUGIN_DIR/$PLUGIN_DIR.php"
+          PLUGIN_NAME=$(grep -oP 'Plugin Name:\s+\K.+' "$PHP_FILE" | head -1 | xargs)
+          echo "name=$PLUGIN_NAME" >> $GITHUB_OUTPUT
+          echo "✅ Plugin name: $PLUGIN_NAME"
+      
+      - name: Create plugin zip
+        run: |
+          PLUGIN_DIR="${{ steps.plugin.outputs.directory }}"
+          VERSION="${{ steps.php_version.outputs.version }}"
+          ZIP_NAME="${PLUGIN_DIR}-${VERSION}.zip"
+          
+          cd "$PLUGIN_DIR"
+          zip -r "../${ZIP_NAME}" . -x "*.git*" "*.DS_Store" ".github/*"
+          cd ..
+          echo "✅ Created: $ZIP_NAME"
+          echo "zip_file=$ZIP_NAME" >> $GITHUB_OUTPUT
+        id: zip
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.plugin.outputs.directory }}-v${{ steps.php_version.outputs.version }}
+          name: ${{ steps.plugin_name.outputs.name }} v${{ steps.php_version.outputs.version }}          
+          files: |
+            ${{ steps.zip.outputs.zip_file }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
