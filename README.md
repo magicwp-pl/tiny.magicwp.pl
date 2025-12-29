@@ -25,6 +25,17 @@ Simple Meta Pixel integration for WordPress. Just add your Pixel ID and it autom
 - Zero bloat, zero spam, zero cost
 - PHP 8.4+ compatible
 
+### [tailwind-gutenberg-block-by-tiny-magicwp-pl](./tailwind-gutenberg-block-by-tiny-magicwp-pl/)
+
+Enable Tailwind CSS v3 for WordPress block templates via checkbox. By default, your theme's CSS/JS loads normally. Enable Tailwind for a specific template to replace theme styles with Tailwind CSS.
+
+**Features:**
+- Per-template Tailwind CSS v3 control via Site Editor checkbox
+- Automatic removal of WordPress default styles/scripts when enabled
+- Custom HTML block for Tailwind-styled content
+- Zero bloat, zero spam, zero cost
+- PHP 8.4+ compatible
+
 ## License
 
 All plugins in this repository are licensed under GPL-2.0 or later.
