@@ -9,6 +9,7 @@ on:
         type: choice
         options:
           - meta-pixel-by-tiny-magicwp-pl
+          - tailwind-gutenberg-block-by-tiny-magicwp-pl
 
 jobs:
   release:
