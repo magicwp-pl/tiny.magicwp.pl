@@ -26,6 +26,8 @@ class Tailwind_Page_Admin {
         add_filter('rest_pre_insert_wp_template', [$this, 'prepare_template_meta_rest'], 10, 2);
         add_action('rest_after_insert_wp_template', [$this, 'save_template_meta_rest'], 10, 3);
         add_action('rest_after_update_wp_template', [$this, 'save_template_meta_rest'], 10, 3);
+        add_action('admin_menu', [$this, 'add_cache_menu']);
+        add_action('admin_init', [$this, 'handle_cache_actions']);
     }
 
     public function register_html_tailwind_block(): void {
@@ -191,7 +193,7 @@ class Tailwind_Page_Admin {
             return;
         }
         
-        if (!isset($_POST['tailwind_page_meta_nonce']) || !wp_verify_nonce(wp_unslash(value: $_POST['tailwind_page_meta_nonce']), 'tailwind_page_meta')) {
+        if (!isset($_POST['tailwind_page_meta_nonce']) || !wp_verify_nonce(wp_unslash($_POST['tailwind_page_meta_nonce']), 'tailwind_page_meta')) {
             return;
         }
         
@@ -279,6 +281,254 @@ class Tailwind_Page_Admin {
         }
         
         return '<div class="html-tailwind-block">' . $content . '</div>';
+    }
+
+    public function add_cache_menu(): void {
+        global $menu;
+
+        $menu_exists = false;
+        foreach ($menu as $item) {
+            if (($item[2] ?? null) === 'tiny-magicwp-pl') {
+                $menu_exists = true;
+                break;
+            }
+        }
+
+        if (!$menu_exists) {
+            add_menu_page(
+                'tiny.magicwp.pl',
+                'tiny.magicwp.pl',
+                'manage_options',
+                'tiny-magicwp-pl',
+                '__return_empty_string',
+                '',
+                30
+            );
+        }
+
+        add_submenu_page(
+            'tiny-magicwp-pl',
+            'Tailwind Gutenberg Block',
+            'Tailwind Gutenberg Block',
+            'manage_options',
+            'tailwind-gutenberg-block-cache',
+            [$this, 'render_cache_page']
+        );
+    }
+
+    public function handle_cache_actions(): void {
+        if (!isset($_GET['page']) || $_GET['page'] !== 'tailwind-gutenberg-block-cache') {
+            return;
+        }
+
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        if (isset($_GET['action']) && isset($_GET['_wpnonce'])) {
+            $nonce = isset($_GET['_wpnonce']) ? wp_unslash($_GET['_wpnonce']) : '';
+            if (!wp_verify_nonce($nonce, 'tailwind_cache_action')) {
+                wp_die('Security check failed');
+            }
+
+            require_once __DIR__ . '/../includes/class-tailwind-cache.php';
+            $cache = new Tailwind_Cache();
+
+            $action = isset($_GET['action']) ? sanitize_text_field(wp_unslash($_GET['action'])) : '';
+
+            if ($action === 'delete_all') {
+                $deleted = $cache->delete_all_cache();
+                wp_safe_redirect(add_query_arg(array(
+                    'page' => 'tailwind-gutenberg-block-cache',
+                    'deleted_all' => $deleted,
+                    '_wpnonce' => wp_create_nonce('tailwind_cache_action')
+                ), admin_url('admin.php')));
+                exit;
+            }
+
+            if ($action === 'delete' && isset($_GET['hash'])) {
+                $hash = sanitize_text_field(wp_unslash($_GET['hash']));
+                if ($cache->delete_cache_file($hash)) {
+                    wp_safe_redirect(add_query_arg(array(
+                        'page' => 'tailwind-gutenberg-block-cache',
+                        'deleted' => '1',
+                        '_wpnonce' => wp_create_nonce('tailwind_cache_action')
+                    ), admin_url('admin.php')));
+                } else {
+                    wp_safe_redirect(add_query_arg(array(
+                        'page' => 'tailwind-gutenberg-block-cache',
+                        'error' => '1',
+                        '_wpnonce' => wp_create_nonce('tailwind_cache_action')
+                    ), admin_url('admin.php')));
+                }
+                exit;
+            }
+        }
+    }
+
+    public function render_cache_page(): void {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        require_once __DIR__ . '/../includes/class-tailwind-cache.php';
+        $cache = new Tailwind_Cache();
+
+        if (isset($_GET['deleted_all']) || isset($_GET['deleted']) || isset($_GET['error'])) {
+            if (isset($_GET['_wpnonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpnonce'])), 'tailwind_cache_action')) {
+                if (isset($_GET['deleted_all'])) {
+                    $deleted_count = intval(wp_unslash($_GET['deleted_all']));
+                    add_settings_error('tailwind_cache_messages', 'tailwind_cache_message', 
+                        sprintf('Deleted %d cache file(s).', $deleted_count), 'updated');
+                }
+
+                if (isset($_GET['deleted'])) {
+                    add_settings_error('tailwind_cache_messages', 'tailwind_cache_message', 
+                        'Cache file deleted successfully.', 'updated');
+                }
+
+                if (isset($_GET['error'])) {
+                    add_settings_error('tailwind_cache_messages', 'tailwind_cache_message', 
+                        'Error deleting cache file.', 'error');
+                }
+            }
+        }
+
+        settings_errors('tailwind_cache_messages');
+
+        $cached_pages = $cache->get_all_cached_pages();
+        $pages_with_cache = $this->get_pages_with_cache($cached_pages);
+
+        ?>
+        <div class="wrap">
+            <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+            <p>
+                <a href="<?php echo esc_url(wp_nonce_url(
+                    add_query_arg(array(
+                        'page' => 'tailwind-gutenberg-block-cache',
+                        'action' => 'delete_all'
+                    ), admin_url('admin.php')),
+                    'tailwind_cache_action'
+                )); ?>" 
+                   class="button button-secondary" 
+                   onclick="return confirm('Are you sure you want to delete all cache files?');">
+                    Delete All Cache
+                </a>
+            </p>
+
+            <h2>Cached Pages</h2>
+            <?php if (empty($pages_with_cache)): ?>
+                <p>No cached pages found.</p>
+            <?php else: ?>
+                <table class="wp-list-table widefat fixed striped">
+                    <thead>
+                        <tr>
+                            <th scope="col" class="manage-column">Page URL</th>
+                            <th scope="col" class="manage-column">Cache File</th>
+                            <th scope="col" class="manage-column">Size</th>
+                            <th scope="col" class="manage-column">Modified</th>
+                            <th scope="col" class="manage-column">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($pages_with_cache as $page): ?>
+                            <tr>
+                                <td>
+                                    <strong><?php echo esc_html($page['url']); ?></strong>
+                                </td>
+                                <td>
+                                    <code><?php echo esc_html($page['filename']); ?></code>
+                                </td>
+                                <td>
+                                    <?php echo esc_html(size_format($page['size'])); ?>
+                                </td>
+                                <td>
+                                    <?php echo esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $page['modified'])); ?>
+                                </td>
+                                <td>
+                                    <a href="<?php echo esc_url(wp_nonce_url(
+                                        add_query_arg(array(
+                                            'page' => 'tailwind-gutenberg-block-cache',
+                                            'action' => 'delete',
+                                            'hash' => $page['hash']
+                                        ), admin_url('admin.php')),
+                                        'tailwind_cache_action'
+                                    )); ?>" 
+                                       class="button button-small" 
+                                       onclick="return confirm('Are you sure you want to delete this cache file?');">
+                                        Delete
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    private function get_pages_with_cache(array $cached_pages): array {
+        $pages_with_cache = array();
+
+        $all_pages = get_pages(array(
+            'number' => -1,
+            'post_status' => array('publish', 'private', 'draft')
+        ));
+
+        $all_posts = get_posts(array(
+            'numberposts' => -1,
+            'post_status' => array('publish', 'private', 'draft'),
+            'post_type' => 'any'
+        ));
+
+        $all_urls = array();
+
+        foreach ($all_pages as $page) {
+            $url = get_permalink($page->ID);
+            if ($url) {
+                $all_urls[] = $url;
+            }
+        }
+
+        foreach ($all_posts as $post) {
+            $url = get_permalink($post->ID);
+            if ($url) {
+                $all_urls[] = $url;
+            }
+        }
+
+        $home_url = home_url('/');
+        $all_urls[] = $home_url;
+
+        require_once __DIR__ . '/../includes/class-tailwind-cache.php';
+        $cache = new Tailwind_Cache();
+
+        foreach ($cached_pages as $cached_page) {
+            $hash = $cached_page['hash'];
+            
+            foreach ($all_urls as $url) {
+                $parsed = wp_parse_url($url);
+                $path = $parsed['path'] ?? '/';
+                if (!$path) {
+                    $path = '/';
+                }
+                $url_hash = md5($path);
+                
+                if ($url_hash === $hash) {
+                    $pages_with_cache[] = array(
+                        'url' => $url,
+                        'hash' => $hash,
+                        'filename' => $cached_page['filename'],
+                        'size' => $cached_page['size'],
+                        'modified' => $cached_page['modified']
+                    );
+                    break;
+                }
+            }
+        }
+
+        return $pages_with_cache;
     }
 }
 

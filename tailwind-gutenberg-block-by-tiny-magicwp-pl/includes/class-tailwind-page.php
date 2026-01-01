@@ -7,6 +7,7 @@ if (!defined('ABSPATH')) {
 }
 
 require_once __DIR__ . '/class-tailwind-page-template.php';
+require_once __DIR__ . '/class-tailwind-cache.php';
 require_once __DIR__ . '/../admin/class-tailwind-page-admin.php';
 require_once __DIR__ . '/../public/class-tailwind-page-public.php';
 
@@ -60,6 +61,9 @@ class Tailwind_Page {
                 update_post_meta($template_id, '_use_tailwind', '1');
             }
         }
+
+        $cache = new Tailwind_Cache();
+        $cache->ensure_cache_dir();
     }
 }
 
