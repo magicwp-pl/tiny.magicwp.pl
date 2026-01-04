@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Plugin Name: Tailwind Gutenberg Block by tiny.magicwp.pl
  * Description: Plugin adds new Gutenberg block for Tailwind CSS v3
- * Version: 1.0.9
+ * Version: 1.0.10
  * Plugin URI:        https://tiny.magicwp.pl/tailwind-gutenberg-block
  * Author:            tiny.magicwp.pl
  * Author URI:        https://tiny.magicwp.pl

@@ -28,6 +28,8 @@ class Tailwind_Page_Admin {
         add_action('rest_after_update_wp_template', [$this, 'save_template_meta_rest'], 10, 3);
         add_action('admin_menu', [$this, 'add_cache_menu']);
         add_action('admin_init', [$this, 'handle_cache_actions']);
+        add_action('admin_bar_menu', [$this, 'add_cache_clear_link'], 100);
+        add_action('init', [$this, 'handle_frontend_cache_clear']);
     }
 
     public function register_html_tailwind_block(): void {
@@ -529,6 +531,113 @@ class Tailwind_Page_Admin {
         }
 
         return $pages_with_cache;
+    }
+
+    public function add_cache_clear_link($wp_admin_bar): void {
+        if (is_admin()) {
+            return;
+        }
+
+        if (!is_admin_bar_showing()) {
+            return;
+        }
+
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        $current_url = $this->get_current_url();
+        if (!$current_url) {
+            return;
+        }
+
+        require_once __DIR__ . '/../includes/class-tailwind-cache.php';
+        $cache = new Tailwind_Cache();
+
+        if (!$cache->cache_exists($current_url)) {
+            return;
+        }
+
+        $nonce = wp_create_nonce('tailwind_clear_page_cache');
+        $clear_url = add_query_arg(array(
+            'tailwind_clear_cache' => '1',
+            '_wpnonce' => $nonce
+        ), $current_url);
+
+        $cache_list_url = admin_url('admin.php?page=tailwind-gutenberg-block-cache');
+
+        $wp_admin_bar->add_menu(array(
+            'id' => 'tailwind-clear-cache',
+            'title' => '<span class="ab-icon dashicons dashicons-performance"></span><span class="ab-label">Wyczyść cache</span>',
+            'href' => esc_url($clear_url),
+            'meta' => array(
+                'title' => 'Wyczyść cache dla tej strony'
+            )
+        ));
+
+        $wp_admin_bar->add_menu(array(
+            'parent' => 'tailwind-clear-cache',
+            'id' => 'tailwind-cache-list',
+            'title' => 'Lista wszystkich cache',
+            'href' => esc_url($cache_list_url),
+            'meta' => array(
+                'title' => 'Zobacz wszystkie zapisane cache'
+            )
+        ));
+    }
+
+    public function handle_frontend_cache_clear(): void {
+        if (is_admin()) {
+            return;
+        }
+
+        if (!isset($_GET['tailwind_clear_cache']) || !isset($_GET['_wpnonce'])) {
+            return;
+        }
+
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        $nonce = isset($_GET['_wpnonce']) ? wp_unslash($_GET['_wpnonce']) : '';
+        if (!wp_verify_nonce($nonce, 'tailwind_clear_page_cache')) {
+            return;
+        }
+
+        $current_url = $this->get_current_url();
+        if (!$current_url) {
+            return;
+        }
+
+        require_once __DIR__ . '/../includes/class-tailwind-cache.php';
+        $cache = new Tailwind_Cache();
+
+        $parsed = wp_parse_url($current_url);
+        $path = $parsed['path'] ?? '/';
+        if (!$path) {
+            $path = '/';
+        }
+        $hash = md5($path);
+
+        $cache->delete_cache_file($hash);
+
+        $redirect_url = remove_query_arg(array('tailwind_clear_cache', '_wpnonce'), $current_url);
+        wp_safe_redirect($redirect_url);
+        exit;
+    }
+
+    private function get_current_url(): string {
+        if (!isset($_SERVER['HTTP_HOST']) || !isset($_SERVER['REQUEST_URI'])) {
+            return '';
+        }
+
+        $host = sanitize_text_field(wp_unslash($_SERVER['HTTP_HOST']));
+        $request_uri = sanitize_text_field(wp_unslash($_SERVER['REQUEST_URI']));
+
+        $scheme = is_ssl() ? 'https' : 'http';
+        $url = $scheme . '://' . $host . $request_uri;
+
+        return esc_url_raw($url);
     }
 }
 
