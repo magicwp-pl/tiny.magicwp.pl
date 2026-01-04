@@ -3,7 +3,7 @@ Contributors: tinymagicwp
 Tags: tailwind, tailwindcss, template, block-theme, gutenberg-block
 Requires at least: 6.8
 Tested up to: 6.9
-Stable tag: 1.0.10
+Stable tag: 1.0.11
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -84,6 +84,10 @@ No. This plugin will always be completely free with no premium versions or paid 
 
 == Changelog ==
 
+= 1.0.11 =
+* Fixed warning when clearing cache - added file existence check before filemtime() call
+* Improved cache clearing reliability by preventing race conditions
+
 = 1.0.10 =
 * Added cache clear link in admin bar for frontend pages
 * Administrators can now clear cache for current page directly from admin bar
@@ -104,6 +108,9 @@ No. This plugin will always be completely free with no premium versions or paid 
 * Template creation on activation
 
 == Upgrade Notice ==
+
+= 1.0.11 =
+Fixed warning when clearing cache. Improved cache clearing reliability. Recommended update to prevent PHP warnings.
 
 = 1.0.10 =
 Added convenient cache clearing feature in admin bar. Administrators can now clear cache for any page directly from the frontend. Recommended update for better cache management.

@@ -96,13 +96,16 @@ class Tailwind_Cache {
 
             $filename = basename($file);
             if (preg_match('/^tailwind-([a-f0-9]{32})\.css$/', $filename, $matches)) {
+                if (!file_exists($file)) {
+                    continue;
+                }
                 $hash = $matches[1];
                 $cached_pages[] = array(
                     'hash' => $hash,
                     'file' => $file,
                     'filename' => $filename,
-                    'size' => filesize($file),
-                    'modified' => filemtime($file)
+                    'size' => file_exists($file) ? filesize($file) : 0,
+                    'modified' => file_exists($file) ? filemtime($file) : 0
                 );
             }
         }
